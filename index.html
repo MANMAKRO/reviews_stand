@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Experience Feedback</title>
+  <style>
+    /* ALL STYLES FROM PREVIOUS ANSWER REMAIN UNCHANGED */
+    body { font-family: Arial, sans-serif; text-align: center; padding: 50px; margin: 0; }
+    #fullscreenBtn { position: fixed; top: 10px; right: 10px; background-color: #007BFF; color: white; padding: 10px 15px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; z-index: 1000; }
+    #voteContainer { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; }
+    button.vote { margin: 65px; padding: 25px 35px; border: none; border-radius: 5px; font-size: 32px; cursor: pointer; color: white; transition: transform 0.2s; transform: scale(2); }
+    button.vote.vote1 { background-color: green; } button.vote.vote2 { background-color: limegreen; } button.vote.vote3 { background-color: yellow; color: black; } button.vote.vote4 { background-color: orange; } button.vote.vote5 { background-color: red; }
+    @media (max-width: 100px) { button.vote { transform: scale(1); } }
+    #thanksMessage { font-size: 32px; display: none; margin-top: 20px; }
+    #questionContainer { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border: 2px solid #ccc; z-index: 1000; width: 80%; max-width: 600px; }
+    .question-text { font-size: 24px; margin-bottom: 20px; } .option { display: block; width: 100%; padding: 15px; margin: 5px 0; font-size: 24px; touch-action: manipulation; border: 1px solid #ddd; border-radius: 5px; }
+    .timer { position: absolute; top: 10px; right: 10px; font-size: 24px; color: #ff4444; }
+  </style>
+</head>
+<body>
+  <button id="fullscreenBtn" onclick="enterFullscreen()">Fullscreen</button>
+  <h1>How was your experience?</h1>
+  
+  <div id="voteContainer">
+    <button class="vote vote1" onclick="submitVote(1)">😀</button>
+    <button class="vote vote2" onclick="submitVote(2)">🙂</button>
+    <button class="vote vote3" onclick="submitVote(3)">😐</button>
+    <button class="vote vote4" onclick="submitVote(4)">🙁</button>
+    <button class="vote vote5" onclick="submitVote(5)">😢</button>
+  </div>
+  
+  <div id="thanksMessage">Thanks!</div>
+
+  <script>
+    let questionnaireTimer;
+
+    // Fullscreen function
+    function enterFullscreen() {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) elem.requestFullscreen();
+      else if (elem.mozRequestFullScreen) elem.mozRequestFullScreen();
+      else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+      else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+      document.getElementById("fullscreenBtn").style.display = "none";
+    }
+
+    // Voting function
+    function submitVote(vote) {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "record.php", true);
+      xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+          document.getElementById("voteContainer").style.display = "none";
+          document.getElementById("thanksMessage").style.display = "block";
+          fetch('get_active_question.php')
+            .then(response => response.json())
+            .then(question => {
+              if(question) showQuestion(question, vote);
+              else resetInterface();
+            });
+        }
+      };
+      xhr.send("vote=" + vote);
+    }
+
+    // Question display
+    function showQuestion(question, vote) {
+      const container = document.createElement('div');
+      container.id = 'questionContainer';
+      container.innerHTML = `
+        <div class="timer">10</div>
+        <div class="question-text">${question.question}</div>
+        <div class="options-container"></div>
+      `;
+      
+      question.options.forEach((option, index) => {
+        const btn = document.createElement('button');
+        btn.className = 'option';
+        btn.textContent = option;
+        btn.onclick = () => handleAnswer(question.id, vote, index);
+        container.querySelector('.options-container').appendChild(btn);
+      });
+      
+      document.body.appendChild(container);
+      startTimer(question.id, vote);
+    }
+
+    // Answer handling
+    function handleAnswer(qId, vote, answerIndex) {
+      clearInterval(questionnaireTimer);
+      recordQuestionResponse(qId, vote, answerIndex);
+      closeQuestion();
+    }
+
+    // Timer function
+    function startTimer(qId, vote) {
+      let seconds = 10;
+      questionnaireTimer = setInterval(() => {
+        seconds--;
+        document.querySelector('.timer').textContent = seconds;
+        if (seconds <= 0) {
+          recordQuestionResponse(qId, vote, null);
+          closeQuestion();
+        }
+      }, 1000);
+    }
+
+    // Record response
+    function recordQuestionResponse(qId, vote, answer) {
+      fetch('record_questionnaire.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          questionId: qId,
+          vote: vote,
+          answer: answer,
+          timestamp: new Date().toISOString()
+        })
+      });
+    }
+
+    // Cleanup functions
+    function closeQuestion() {
+      clearInterval(questionnaireTimer);
+      const container = document.getElementById('questionContainer');
+      if (container) container.remove();
+      resetInterface();
+    }
+
+    function resetInterface() {
+      setTimeout(() => {
+        document.getElementById("voteContainer").style.display = "flex";
+        document.getElementById("thanksMessage").style.display = "none";
+      }, 1000);
+    }
+  </script>
+</body>
+</html>
